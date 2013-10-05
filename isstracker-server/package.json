@@ -1,0 +1,16 @@
+{
+  "author": "Thomas Sarlandie <thomas@getpebble.com>",
+  "name": "pebble-issserver",
+  "description": "A NodeJS server for the Pebble watch ISS tracker",
+  "version": "0.0.1",
+  "dependencies": {
+    "express": "3.0.5"
+  },
+  "devDependencies": {
+
+  },
+  "optionalDependencies": {},
+  "engines": {
+    "node": "*"
+  }
+}
