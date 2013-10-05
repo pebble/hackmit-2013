@@ -1,14 +1,16 @@
 #include "pebble_os.h"
 #include "pebble_app.h"
 #include "pebble_fonts.h"
+#include "http.h"
 
-
-#define MY_UUID { 0x97, 0x6D, 0xB7, 0x41, 0xF4, 0xD9, 0x42, 0x28, 0x95, 0xF1, 0xC1, 0x7B, 0xB2, 0x06, 0x9D, 0xDD }
-PBL_APP_INFO(MY_UUID,
+PBL_APP_INFO(HTTP_UUID,
              "ISS Tracker", "Pebble Examples",
              1, 0, /* App version */
              DEFAULT_MENU_ICON,
              APP_INFO_STANDARD_APP);
+
+#define KEY_NEXTPASS 0
+#define ISS_COOKIE 155
 
 Window window;
 TextLayer time_text_layer;
@@ -16,8 +18,39 @@ static char time_text[10];
 
 TextLayer nextpass_text_layer;
 static char nextpass_text[10];
-time_t nextpass_time = 1381002096;
+time_t nextpass_time = 0;
 BmpContainer background_image;
+
+int error = 0;
+
+// Starts an HTTP Request to get the time until the next pass of the ISS
+void start_http_request() {
+  DictionaryIterator *out;
+  HTTPResult result = http_out_get("http://io.sarfata.org/iss/", ISS_COOKIE, &out);
+  if (result != HTTP_OK) {
+    error = result;
+    return;
+  }
+  result = http_out_send();
+  if (result != HTTP_OK) {
+    error = result;
+    return;
+  }
+}
+
+// Called when the http request is successful. Updates the nextpass_time.
+void handle_http_success(int32_t request_id, int http_status, DictionaryIterator* sent, void* context) {
+  Tuple *nextpass_tuple = dict_find(sent, KEY_NEXTPASS);
+  if (nextpass_tuple) {
+    nextpass_time = nextpass_tuple->value->uint32;
+  }
+  error = 0;
+}
+
+// Called when the http request fails. Updates the error variable.
+void handle_http_failure(int32_t request_id, int http_status, void* context) {
+  error = http_status;
+}
 
 // Called every second to update the text fields
 void handle_tick(AppContextRef app_ctx, PebbleTickEvent *t) {
@@ -66,6 +99,12 @@ void handle_init(AppContextRef ctx) {
   text_layer_set_text_alignment(&time_text_layer, GTextAlignmentCenter);
   text_layer_set_background_color(&time_text_layer, GColorClear);
   layer_add_child(window_get_root_layer(&window), (Layer*)&nextpass_text_layer);
+
+
+  // Add background and both text fields to the window
+
+  // Start an HTTP Request
+  start_http_request();
 }
 
 void handle_deinit(AppContextRef ctx) {
@@ -80,8 +119,19 @@ void pbl_main(void *params) {
     .tick_info = {
       .tick_handler = &handle_tick,
       .tick_units = SECOND_UNIT
+    },
+    .messaging_info = {
+      .buffer_sizes = {
+        .inbound = 124,
+        .outbound = 124,
+      }
     }
   };
+  HTTPCallbacks http_callbacks = {
+    .failure = handle_http_failure,
+    .success = handle_http_success
+  };
+  http_register_callbacks(http_callbacks, NULL);
 
   app_event_loop(params, &handlers);
 }
